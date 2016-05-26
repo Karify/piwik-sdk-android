@@ -13,23 +13,24 @@ import android.support.annotation.VisibleForTesting;
 
 import org.json.JSONObject;
 import org.piwik.sdk.Piwik;
+import org.piwik.sdk.TrackMe;
 
-import java.io.BufferedWriter;
-import java.io.OutputStreamWriter;
-import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.HttpUrl;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import timber.log.Timber;
 
 /**
@@ -45,12 +46,13 @@ import timber.log.Timber;
  */
 @SuppressWarnings("deprecation")
 public class Dispatcher {
+    private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
     private static final String LOGGER_TAG = Piwik.LOGGER_PREFIX + "Dispatcher";
-    private final BlockingQueue<String> mDispatchQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<TrackMe> mDispatchQueue = new LinkedBlockingQueue<>();
     private final Object mThreadControl = new Object();
     private final Semaphore mSleepToken = new Semaphore(0);
     private final Piwik mPiwik;
-    private final URL mApiUrl;
+    private final HttpUrl mHttpUrl;
     private final String mAuthToken;
 
     private List<Packet> mDryRunOutput = Collections.synchronizedList(new ArrayList<Packet>());
@@ -61,9 +63,9 @@ public class Dispatcher {
     public static final long DEFAULT_DISPATCH_INTERVAL = 120 * 1000; // 120s
     private volatile long mDispatchInterval = DEFAULT_DISPATCH_INTERVAL;
 
-    public Dispatcher(Piwik piwik, URL apiUrl, String authToken) {
+    public Dispatcher(Piwik piwik, HttpUrl httpUrl, String authToken) {
         mPiwik = piwik;
-        mApiUrl = apiUrl;
+        mHttpUrl = httpUrl;
         mAuthToken = authToken;
     }
 
@@ -124,8 +126,8 @@ public class Dispatcher {
         return true;
     }
 
-    public void submit(String query) {
-        mDispatchQueue.add(query);
+    public void submit(TrackMe trackMe) {
+        mDispatchQueue.add(trackMe);
         if (mDispatchInterval != -1)
             launch();
     }
@@ -143,10 +145,10 @@ public class Dispatcher {
                 }
 
                 int count = 0;
-                List<String> availableEvents = new ArrayList<>();
+                List<TrackMe> availableEvents = new ArrayList<>();
                 mDispatchQueue.drainTo(availableEvents);
                 Timber.tag(LOGGER_TAG).d("Drained %s events.", availableEvents.size());
-                TrackerBulkURLWrapper wrapper = new TrackerBulkURLWrapper(mApiUrl, availableEvents, mAuthToken);
+                TrackerBulkURLWrapper wrapper = new TrackerBulkURLWrapper(mHttpUrl, availableEvents, mAuthToken);
                 Iterator<TrackerBulkURLWrapper.Page> pageIterator = wrapper.iterator();
                 while (pageIterator.hasNext()) {
                     TrackerBulkURLWrapper.Page page = pageIterator.next();
@@ -159,10 +161,10 @@ public class Dispatcher {
                         if (dispatch(new Packet(wrapper.getApiUrl(), eventData)))
                             count += page.elementsCount();
                     } else {
-                        URL targetURL = wrapper.getEventUrl(page);
-                        if (targetURL == null)
+                        HttpUrl targetUri = wrapper.getEventUrl(page);
+                        if (targetUri == null)
                             continue;
-                        if (dispatch(new Packet(targetURL)))
+                        if (dispatch(new Packet(targetUri)))
                             count += 1;
                     }
                 }
@@ -181,11 +183,9 @@ public class Dispatcher {
     @VisibleForTesting
     public boolean dispatch(@NonNull Packet packet) {
         // Some error checking
-        if (packet.getTargetURL() == null)
+        if (packet.getJSONObject() != null && packet.getJSONObject().length() == 0) {
             return false;
-        if (packet.getJSONObject() != null && packet.getJSONObject().length() == 0)
-            return false;
-
+        }
         if (mPiwik.isDryRun()) {
             mDryRunOutput.add(packet);
             Timber.tag(LOGGER_TAG).d("DryRun, stored HttpRequest, now %s.", mDryRunOutput.size());
@@ -196,27 +196,27 @@ public class Dispatcher {
             mDryRunOutput.clear();
 
         try {
-            HttpURLConnection urlConnection = (HttpURLConnection) packet.getTargetURL().openConnection();
-            urlConnection.setConnectTimeout(mTimeOut);
-            urlConnection.setReadTimeout(mTimeOut);
-
+            OkHttpClient.Builder builder = new OkHttpClient.Builder();
+            OkHttpClient client = builder
+                    .connectTimeout(mTimeOut, TimeUnit.SECONDS)
+                    .readTimeout(mTimeOut, TimeUnit.SECONDS)
+                    .build();
+            final Request request;
             // IF there is json data we want to do a post
             if (packet.getJSONObject() != null) {
-                // POST
-                urlConnection.setDoOutput(true); // Forces post
-                urlConnection.setRequestProperty("Content-Type", "application/json");
-                urlConnection.setRequestProperty("charset", "utf-8");
-
-                BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(urlConnection.getOutputStream(), "UTF-8"));
-                writer.write(packet.getJSONObject().toString());
-                writer.flush();
-                writer.close();
+                RequestBody body = RequestBody.create(JSON, packet.getJSONObject().toString());
+                request = new Request.Builder()
+                        .url(packet.getTargetURL())
+                        .post(body)
+                        .build();
             } else {
-                // GET
-                urlConnection.setDoOutput(false); // Defaults to false, but for readability
+                request = new Request.Builder()
+                        .url(packet.getTargetURL())
+                        .build();
             }
+            Response response = client.newCall(request).execute();
 
-            int statusCode = urlConnection.getResponseCode();
+            int statusCode = response.code();
             Timber.tag(LOGGER_TAG).d("status code %s", statusCode);
             return statusCode == HttpURLConnection.HTTP_NO_CONTENT || statusCode == HttpURLConnection.HTTP_OK;
         } catch (Exception e) {
@@ -224,42 +224,6 @@ public class Dispatcher {
             Timber.tag(LOGGER_TAG).w(e, "Cannot send request");
         }
         return false;
-    }
-
-    /**
-     * http://stackoverflow.com/q/4737841
-     *
-     * @param param raw data
-     * @return encoded string
-     */
-    public static String urlEncodeUTF8(String param) {
-        try {
-            return URLEncoder.encode(param, "UTF-8").replaceAll("\\+", "%20");
-        } catch (UnsupportedEncodingException e) {
-            Timber.tag(LOGGER_TAG).e(e, "Cannot encode %s", param);
-            return "";
-        } catch (NullPointerException e) {
-            return "";
-        }
-    }
-
-    /**
-     * For bulk tracking purposes
-     *
-     * @param map query map
-     * @return String "?idsite=1&url=http://example.org&action_name=Test bulk log view&rec=1"
-     */
-    public static String urlEncodeUTF8(Map<String, String> map) {
-        StringBuilder sb = new StringBuilder(100);
-        sb.append('?');
-        for (Map.Entry<String, String> entry : map.entrySet()) {
-            sb.append(urlEncodeUTF8(entry.getKey()));
-            sb.append('=');
-            sb.append(urlEncodeUTF8(entry.getValue()));
-            sb.append('&');
-        }
-
-        return sb.substring(0, sb.length() - 1);
     }
 
     public List<Packet> getDryRunOutput() {

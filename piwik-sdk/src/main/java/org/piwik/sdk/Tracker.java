@@ -14,10 +14,10 @@ import android.support.annotation.VisibleForTesting;
 import org.piwik.sdk.dispatcher.Dispatcher;
 import org.piwik.sdk.tools.DeviceHelper;
 
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import okhttp3.HttpUrl;
 import timber.log.Timber;
 
 /**
@@ -46,12 +47,14 @@ public class Tracker {
     protected static final String PREF_KEY_TRACKER_VISITCOUNT = "tracker.visitcount";
     protected static final String PREF_KEY_TRACKER_PREVIOUSVISIT = "tracker.previousvisit";
 
+    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ssZ", Locale.US);
+
     private final Piwik mPiwik;
 
     /**
      * Tracking HTTP API endpoint, for example, http://your-piwik-domain.tld/piwik.php
      */
-    private final URL mApiUrl;
+    private final HttpUrl mHttpUrl;
 
     /**
      * The ID of the website we're tracking a visit/action for.
@@ -64,7 +67,7 @@ public class Tracker {
     private final Random mRandomAntiCachingValue = new Random(new Date().getTime());
     private final TrackMe mDefaultTrackMe = new TrackMe();
 
-    private String mLastEvent;
+    private TrackMe mLastTrackMe;
     private String mApplicationDomain;
     private long mSessionTimeout = 30 * 60 * 1000;
     private long mSessionStartTime;
@@ -76,24 +79,20 @@ public class Tracker {
      * @param siteId    (required) id of site
      * @param authToken (optional) could be null
      * @param piwik     piwik object used to gain access to application params such as name, resolution or lang
-     * @throws MalformedURLException
      */
-    protected Tracker(@NonNull final String url, int siteId, String authToken, @NonNull Piwik piwik) throws MalformedURLException {
+    protected Tracker(@NonNull final HttpUrl url, int siteId, String authToken, @NonNull Piwik piwik) {
 
-        String checkUrl = url;
-        if (checkUrl.endsWith("piwik.php") || checkUrl.endsWith("piwik-proxy.php")) {
-            mApiUrl = new URL(checkUrl);
+        if (url.encodedPath().contains("piwik.php")) {
+            mHttpUrl = url;
         } else {
-            if (!checkUrl.endsWith("/")) {
-                checkUrl += "/";
-            }
-            mApiUrl = new URL(checkUrl + "piwik.php");
+            mHttpUrl = url.resolve("piwik.php");
         }
+
         mPiwik = piwik;
         mSiteId = siteId;
         mAuthToken = authToken;
 
-        mDispatcher = new Dispatcher(mPiwik, mApiUrl, authToken);
+        mDispatcher = new Dispatcher(mPiwik, mHttpUrl, authToken);
 
         String userId = getSharedPreferences().getString(PREF_KEY_TRACKER_USERID, null);
         if (userId == null) {
@@ -121,8 +120,8 @@ public class Tracker {
         return mPiwik;
     }
 
-    public URL getAPIUrl() {
-        return mApiUrl;
+    public HttpUrl getAPIUrl() {
+        return mHttpUrl;
     }
 
     public String getAuthToken() {
@@ -338,7 +337,7 @@ public class Tracker {
         trackMe.trySet(QueryParams.RECORD, DEFAULT_RECORD_VALUE);
         trackMe.trySet(QueryParams.API_VERSION, DEFAULT_API_VERSION_VALUE);
         trackMe.trySet(QueryParams.RANDOM_NUMBER, mRandomAntiCachingValue.nextInt(100000));
-        trackMe.trySet(QueryParams.DATETIME_OF_REQUEST, new SimpleDateFormat("yyyy-MM-dd HH:mm:ssZ").format(new Date()));
+        trackMe.trySet(QueryParams.DATETIME_OF_REQUEST, DATE_FORMAT.format(new Date()));
         trackMe.trySet(QueryParams.SEND_IMAGE, "0");
 
         trackMe.trySet(QueryParams.VISITOR_ID, mDefaultTrackMe.get(QueryParams.VISITOR_ID));
@@ -386,13 +385,13 @@ public class Tracker {
         }
 
         injectBaseParams(trackMe);
-        String event = Dispatcher.urlEncodeUTF8(trackMe.toMap());
+
         if (mPiwik.isOptOut()) {
-            mLastEvent = event;
-            Timber.tag(LOGGER_TAG).d("URL omitted due to opt out: %s", event);
+            mLastTrackMe = trackMe;
+            Timber.tag(LOGGER_TAG).d("URL omitted due to opt out: %s", trackMe.toString());
         } else {
-            mDispatcher.submit(event);
-            Timber.tag(LOGGER_TAG).d("URL added to the queue: %s", event);
+            mDispatcher.submit(trackMe);
+            Timber.tag(LOGGER_TAG).d("URL added to the queue: %s", trackMe.toString());
         }
 
         // we did a first transmission, let the other through.
@@ -435,13 +434,13 @@ public class Tracker {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Tracker tracker = (Tracker) o;
-        return mSiteId == tracker.mSiteId && mApiUrl.equals(tracker.mApiUrl);
+        return mSiteId == tracker.mSiteId && mHttpUrl.equals(tracker.mHttpUrl);
     }
 
     @Override
     public int hashCode() {
         int result = mSiteId;
-        result = 31 * result + mApiUrl.hashCode();
+        result = 31 * result + mHttpUrl.hashCode();
         return result;
     }
 
@@ -455,13 +454,13 @@ public class Tracker {
      * @return query of the event ?r=1&sideId=1..
      */
     @VisibleForTesting
-    public String getLastEvent() {
-        return mLastEvent;
+    public TrackMe getLastTrackMe() {
+        return mLastTrackMe;
     }
 
     @VisibleForTesting
-    public void clearLastEvent() {
-        mLastEvent = null;
+    public void clearLastTrackMe() {
+        mLastTrackMe = null;
     }
 
     @VisibleForTesting

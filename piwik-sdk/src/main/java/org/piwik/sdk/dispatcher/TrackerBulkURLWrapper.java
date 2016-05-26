@@ -16,12 +16,13 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.piwik.sdk.Piwik;
 import org.piwik.sdk.QueryParams;
+import org.piwik.sdk.TrackMe;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
+import okhttp3.HttpUrl;
 import timber.log.Timber;
 
 
@@ -30,15 +31,15 @@ public class TrackerBulkURLWrapper {
     private static final int EVENTS_PER_PAGE = 20;
     private int mCurrentPage = 0;
     private final int mPages;
-    private final URL mApiUrl;
+    private final HttpUrl mHttpUrl;
     private final String mAuthtoken;
-    private final List<String> mEvents;
+    private final List<TrackMe> mTrackMes;
 
-    public TrackerBulkURLWrapper(@NonNull final URL apiUrl, @NonNull final List<String> events, @Nullable final String authToken) {
-        mApiUrl = apiUrl;
+    public TrackerBulkURLWrapper(@NonNull final HttpUrl httpUrl, @NonNull final List<TrackMe> trackMes, @Nullable final String authToken) {
+        mHttpUrl = httpUrl;
         mAuthtoken = authToken;
-        mPages = (int) Math.ceil(events.size() * 1.0 / EVENTS_PER_PAGE);
-        mEvents = events;
+        mPages = (int) Math.ceil(trackMes.size() * 1.0 / EVENTS_PER_PAGE);
+        mTrackMes = trackMes;
     }
 
     protected static int getEventsPerPage() {
@@ -72,8 +73,8 @@ public class TrackerBulkURLWrapper {
     }
 
     @NonNull
-    public URL getApiUrl() {
-        return mApiUrl;
+    public HttpUrl getApiUrl() {
+        return mHttpUrl;
     }
 
     /**
@@ -91,7 +92,7 @@ public class TrackerBulkURLWrapper {
             return null;
         }
 
-        List<String> pageElements = mEvents.subList(page.fromIndex, page.toIndex);
+        List<TrackMe> pageElements = mTrackMes.subList(page.fromIndex, page.toIndex);
 
         if (pageElements.size() == 0) {
             Timber.tag(LOGGER_TAG).w("Empty page");
@@ -118,16 +119,19 @@ public class TrackerBulkURLWrapper {
      * "http://domain.com/piwik.php?idsite=1&url=http://a.org&action_name=Test bulk log Pageview&rec=1"
      */
     @Nullable
-    public URL getEventUrl(Page page) {
-        if (page == null || page.isEmpty())
+    public HttpUrl getEventUrl(Page page) {
+        if (page == null || page.isEmpty()) {
             return null;
-
-        try {
-            return new URL(getApiUrl().toString() + mEvents.get(page.fromIndex));
-        } catch (MalformedURLException e) {
-            e.printStackTrace();
         }
-        return null;
+
+        final HttpUrl.Builder builder = mHttpUrl.newBuilder();
+        final Map<String, String> params = mTrackMes.get(page.fromIndex).toMap();
+
+        for (Map.Entry<String, String> queryParams : params.entrySet()) {
+            builder.addQueryParameter(queryParams.getKey(), queryParams.getValue());
+        }
+
+        return builder.build();
     }
 
     public final class Page {
@@ -140,7 +144,7 @@ public class TrackerBulkURLWrapper {
                 return;
             }
             fromIndex = pageNumber * EVENTS_PER_PAGE;
-            toIndex = Math.min(fromIndex + EVENTS_PER_PAGE, mEvents.size());
+            toIndex = Math.min(fromIndex + EVENTS_PER_PAGE, mTrackMes.size());
         }
 
         public int elementsCount() {

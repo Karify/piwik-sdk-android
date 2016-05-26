@@ -9,9 +9,13 @@ package org.piwik.sdk;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.support.annotation.NonNull;
 
-import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+
+import okhttp3.HttpUrl;
 
 
 public class Piwik {
@@ -46,22 +50,56 @@ public class Piwik {
      * @param siteId     (required) id of site
      * @param authToken  (optional) could be null or valid auth token.
      * @return Tracker object
-     * @throws MalformedURLException
      * @deprecated Use {@link #newTracker(String, int)} as there are security concerns over the authToken.
      */
     @Deprecated
-    public synchronized Tracker newTracker(@NonNull String trackerUrl, int siteId, String authToken) throws MalformedURLException {
-        return new Tracker(trackerUrl, siteId, authToken, this);
+    public synchronized Tracker newTracker(@NonNull String trackerUrl, int siteId, String authToken) {
+        return new Tracker(HttpUrl.parse(trackerUrl), siteId, authToken, this);
+    }
+
+    /**
+     * @param httpUrl (required) Tracking HTTP API endpoint, for example, http://your-piwik-domain.tld/piwik.php
+     * @param siteId  (required) id of site
+     * @return Tracker object
+     */
+    public synchronized Tracker newTracker(@NonNull HttpUrl httpUrl, int siteId) {
+        return new Tracker(httpUrl, siteId, null, this);
     }
 
     /**
      * @param trackerUrl (required) Tracking HTTP API endpoint, for example, http://your-piwik-domain.tld/piwik.php
      * @param siteId     (required) id of site
      * @return Tracker object
-     * @throws MalformedURLException
      */
-    public synchronized Tracker newTracker(@NonNull String trackerUrl, int siteId) throws MalformedURLException {
-        return new Tracker(trackerUrl, siteId, null, this);
+    public synchronized Tracker newTracker(@NonNull String trackerUrl, int siteId) {
+        return newTracker(HttpUrl.parse(trackerUrl), siteId);
+    }
+
+    /**
+     * @param trackerUri (required) Tracking HTTP API endpoint, for example, http://your-piwik-domain.tld/piwik.php
+     * @param siteId     (required) id of site
+     * @return Tracker object
+     */
+    public synchronized Tracker newTracker(@NonNull URI trackerUri, int siteId) {
+        return newTracker(HttpUrl.get(trackerUri), siteId);
+    }
+
+    /**
+     * @param trackerUrl (required) Tracking HTTP API endpoint, for example, http://your-piwik-domain.tld/piwik.php
+     * @param siteId     (required) id of site
+     * @return Tracker object
+     */
+    public synchronized Tracker newTracker(@NonNull URL trackerUrl, int siteId) {
+        return newTracker(HttpUrl.get(trackerUrl), siteId);
+    }
+
+    /**
+     * @param trackerUri (required) Tracking HTTP API endpoint, for example, http://your-piwik-domain.tld/piwik.php
+     * @param siteId     (required) id of site
+     * @return Tracker object
+     */
+    public synchronized Tracker newTracker(@NonNull Uri trackerUri, int siteId) {
+        return newTracker(HttpUrl.parse(trackerUri.toString()), siteId);
     }
 
     /**

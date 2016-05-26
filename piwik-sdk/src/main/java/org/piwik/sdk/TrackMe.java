@@ -28,9 +28,9 @@ public class TrackMe {
     }
 
     protected synchronized TrackMe set(@NonNull String key, String value) {
-        if (value == null)
+        if (value == null) {
             mQueryParams.remove(key);
-        else if (value.length() > 0)
+        } else if (value.length() > 0)
             mQueryParams.put(key, value);
         return this;
     }
@@ -124,4 +124,10 @@ public class TrackMe {
         return mQueryParams.get(queryParams.toString());
     }
 
+    @Override
+    public String toString() {
+        return "TrackMe{" +
+                "mQueryParams=" + mQueryParams +
+                '}';
+    }
 }

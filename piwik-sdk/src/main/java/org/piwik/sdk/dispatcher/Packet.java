@@ -12,36 +12,36 @@ import android.support.annotation.VisibleForTesting;
 
 import org.json.JSONObject;
 
-import java.net.URL;
+import okhttp3.HttpUrl;
 
 /**
  * Data that can be send to the backend API via the Dispatcher
  */
 @VisibleForTesting
 public class Packet {
-    private final URL mTargetURL;
+    private final HttpUrl mHttpUrl;
     private final JSONObject mJSONObject;
     private final long mTimeStamp;
 
     /**
      * Constructor for GET requests
      */
-    public Packet(@NonNull URL targetURL) {
-        this(targetURL, null);
+    public Packet(@NonNull HttpUrl httpUrl) {
+        this(httpUrl, null);
     }
 
     /**
      * Constructor for POST requests
      */
-    public Packet(@NonNull URL targetURL, @Nullable JSONObject JSONObject) {
-        mTargetURL = targetURL;
+    public Packet(@NonNull HttpUrl targetUri, @Nullable JSONObject JSONObject) {
+        mHttpUrl = targetUri;
         mJSONObject = JSONObject;
         mTimeStamp = System.currentTimeMillis();
     }
 
     @NonNull
-    public URL getTargetURL() {
-        return mTargetURL;
+    public HttpUrl getTargetURL() {
+        return mHttpUrl;
     }
 
     /**
