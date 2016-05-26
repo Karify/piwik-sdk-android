@@ -202,21 +202,28 @@ public class Dispatcher {
                     .readTimeout(mTimeOut, TimeUnit.SECONDS)
                     .build();
             final Request request;
+            final RequestBody body;
             // IF there is json data we want to do a post
             if (packet.getJSONObject() != null) {
-                RequestBody body = RequestBody.create(JSON, packet.getJSONObject().toString());
+                body = RequestBody.create(JSON, packet.getJSONObject().toString());
                 request = new Request.Builder()
                         .url(packet.getTargetURL())
                         .post(body)
                         .build();
             } else {
+                body = null;
                 request = new Request.Builder()
                         .url(packet.getTargetURL())
                         .build();
             }
+            Timber.tag(LOGGER_TAG).d("request: %s", request.toString());
+            if (body != null) {
+                Timber.tag(LOGGER_TAG).d("body: %s", packet.getJSONObject().toString());
+            }
             Response response = client.newCall(request).execute();
 
             int statusCode = response.code();
+            response.close();
             Timber.tag(LOGGER_TAG).d("status code %s", statusCode);
             return statusCode == HttpURLConnection.HTTP_NO_CONTENT || statusCode == HttpURLConnection.HTTP_OK;
         } catch (Exception e) {
@@ -229,5 +236,4 @@ public class Dispatcher {
     public List<Packet> getDryRunOutput() {
         return mDryRunOutput;
     }
-
 }

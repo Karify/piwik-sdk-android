@@ -101,7 +101,11 @@ public class TrackerBulkURLWrapper {
 
         JSONObject params = new JSONObject();
         try {
-            params.put("requests", new JSONArray(pageElements));
+            JSONArray requests = new JSONArray();
+            for (TrackMe pageElement : pageElements) {
+                requests.put(new JSONObject(pageElement.toMap()));
+            }
+            params.put("requests", requests);
 
             if (mAuthtoken != null) {
                 params.put(QueryParams.AUTHENTICATION_TOKEN.toString(), mAuthtoken);
