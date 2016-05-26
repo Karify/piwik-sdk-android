@@ -3,7 +3,6 @@ package org.piwik.sdk;
 import android.annotation.TargetApi;
 import android.app.Application;
 import android.os.Build;
-import android.util.Pair;
 
 import org.json.JSONArray;
 import org.junit.Test;
@@ -12,14 +11,11 @@ import org.piwik.sdk.ecommerce.EcommerceItems;
 import org.piwik.sdk.testhelper.DefaultTestCase;
 import org.piwik.sdk.testhelper.FullEnvTestRunner;
 import org.piwik.sdk.testhelper.TestActivity;
-import org.piwik.sdk.tools.UrlHelper;
 import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
-import java.net.URI;
 import java.net.URL;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -50,16 +46,16 @@ public class TrackHelperTest extends DefaultTestCase {
         // emulate default trackScreenView
         Robolectric.buildActivity(TestActivity.class).create().start().resume().visible().get();
 
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         validateDefaultQuery(queryParams);
         assertEquals(queryParams.get(QueryParams.ACTION_NAME), TestActivity.getTestTitle());
 
         app.unregisterActivityLifecycleCallbacks(callbacks);
-        tracker.clearLastEvent();
-        assertNull(tracker.getLastEvent());
+        tracker.clearLastTrackMe();
+        assertNull(tracker.getLastTrackMe());
         // emulate default trackScreenView
         Robolectric.buildActivity(TestActivity.class).create().start().resume().visible().get();
-        assertNull(tracker.getLastEvent());
+        assertNull(tracker.getLastTrackMe());
     }
 
     @Test
@@ -129,26 +125,26 @@ public class TrackHelperTest extends DefaultTestCase {
     @Test
     public void testOutlink() throws Exception {
         Tracker tracker = createTracker();
-        assertNull(tracker.getLastEvent());
+        assertNull(tracker.getLastTrackMe());
 
         TrackHelper.track().outlink(new URL("file://mount/sdcard/something")).with(tracker);
-        assertNull(tracker.getLastEvent());
+        assertNull(tracker.getLastTrackMe());
 
         URL valid = new URL("https://foo.bar");
         TrackHelper.track().outlink(valid).with(tracker);
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals(valid.toExternalForm(), queryParams.get(QueryParams.LINK));
         assertEquals(valid.toExternalForm(), queryParams.get(QueryParams.URL_PATH));
 
         valid = new URL("https://foo.bar");
         TrackHelper.track().outlink(valid).with(tracker);
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals(valid.toExternalForm(), queryParams.get(QueryParams.LINK));
         assertEquals(valid.toExternalForm(), queryParams.get(QueryParams.URL_PATH));
 
         valid = new URL("ftp://foo.bar");
         TrackHelper.track().outlink(valid).with(tracker);
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals(valid.toExternalForm(), queryParams.get(QueryParams.LINK));
         assertEquals(valid.toExternalForm(), queryParams.get(QueryParams.URL_PATH));
     }
@@ -156,34 +152,34 @@ public class TrackHelperTest extends DefaultTestCase {
     @Test
     public void testDownloadTrackForced() throws Exception {
         Tracker tracker = createTracker();
-        assertNull(tracker.getLastEvent());
+        assertNull(tracker.getLastTrackMe());
 
         TrackHelper.track().download().with(tracker);
-        assertNotNull(tracker.getLastEvent());
+        assertNotNull(tracker.getLastTrackMe());
 
-        tracker.clearLastEvent();
+        tracker.clearLastTrackMe();
 
         TrackHelper.track().download().with(tracker);
-        assertNull(tracker.getLastEvent());
+        assertNull(tracker.getLastTrackMe());
 
         TrackHelper.track().download().force().with(tracker);
-        assertNotNull(tracker.getLastEvent());
+        assertNotNull(tracker.getLastTrackMe());
     }
 
     @Test
     public void testDownloadCustomVersion() throws Exception {
         Tracker tracker = createTracker();
-        assertNull(tracker.getLastEvent());
+        assertNull(tracker.getLastTrackMe());
 
         String version = UUID.randomUUID().toString();
         TrackHelper.track().download().version(version).with(tracker);
-        assertNotNull(tracker.getLastEvent());
-        QueryHashMap<String, String> map = parseEventUrl(tracker.getLastEvent());
+        assertNotNull(tracker.getLastTrackMe());
+        QueryHashMap<String, String> map = parseTrackMe(tracker.getLastTrackMe());
         assertTrue(map.get(QueryParams.DOWNLOAD).endsWith(version));
 
-        tracker.clearLastEvent();
+        tracker.clearLastTrackMe();
         TrackHelper.track().download().version(version).with(tracker);
-        assertNull(tracker.getLastEvent());
+        assertNull(tracker.getLastTrackMe());
     }
 
     @Test
@@ -194,8 +190,7 @@ public class TrackHelperTest extends DefaultTestCase {
                 .variable(1, "2", "3")
                 .with(tracker);
 
-        String event = tracker.getLastEvent();
-        Map<String, String> queryParams = parseEventUrl(event);
+        Map<String, String> queryParams = tracker.getLastTrackMe().toMap();
 
         assertEquals("{'1':['2','3']}".replaceAll("'", "\""), queryParams.get("cvar"));
     }
@@ -204,7 +199,7 @@ public class TrackHelperTest extends DefaultTestCase {
     public void testTrackScreenView() throws Exception {
         Tracker tracker = createTracker();
         TrackHelper.track().screen("/test/test").title("title").with(tracker);
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
 
         assertTrue(queryParams.get(QueryParams.URL_PATH).endsWith("/test/test"));
         validateDefaultQuery(queryParams);
@@ -214,7 +209,7 @@ public class TrackHelperTest extends DefaultTestCase {
     public void testTrackScreenWithTitleView() throws Exception {
         Tracker tracker = createTracker();
         TrackHelper.track().screen("test/test").title("Test title").with(tracker);
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
 
         assertTrue(queryParams.get(QueryParams.URL_PATH).endsWith("/test/test"));
         assertEquals(queryParams.get(QueryParams.ACTION_NAME), "Test title");
@@ -237,7 +232,7 @@ public class TrackHelperTest extends DefaultTestCase {
     public void testTrackEvent() throws Exception {
         Tracker tracker = createTracker();
         TrackHelper.track().event("category", "test action").with(tracker);
-        checkEvent(parseEventUrl(tracker.getLastEvent()), null, null);
+        checkEvent(parseTrackMe(tracker.getLastTrackMe()), null, null);
     }
 
     @Test
@@ -245,7 +240,7 @@ public class TrackHelperTest extends DefaultTestCase {
         Tracker tracker = createTracker();
         String name = "test name2";
         TrackHelper.track().event("category", "test action").name(name).with(tracker);
-        checkEvent(parseEventUrl(tracker.getLastEvent()), name, null);
+        checkEvent(parseTrackMe(tracker.getLastTrackMe()), name, null);
     }
 
     @Test
@@ -253,14 +248,14 @@ public class TrackHelperTest extends DefaultTestCase {
         Tracker tracker = createTracker();
         String name = "test name3";
         TrackHelper.track().event("category", "test action").name(name).value(1f).with(tracker);
-        checkEvent(parseEventUrl(tracker.getLastEvent()), name, 1f);
+        checkEvent(parseTrackMe(tracker.getLastTrackMe()), name, 1f);
     }
 
     @Test
     public void testTrackGoal() throws Exception {
         Tracker tracker = createTracker();
         TrackHelper.track().goal(1).with(tracker);
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
 
         assertNull(queryParams.get(QueryParams.REVENUE));
         assertEquals(queryParams.get(QueryParams.GOAL_ID), "1");
@@ -271,7 +266,7 @@ public class TrackHelperTest extends DefaultTestCase {
     public void testTrackGoalRevenue() throws Exception {
         Tracker tracker = createTracker();
         TrackHelper.track().goal(1).revenue(100f).with(tracker);
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
 
         assertEquals("1", queryParams.get(QueryParams.GOAL_ID));
         assertTrue(100f == Float.valueOf(queryParams.get(QueryParams.REVENUE)));
@@ -282,7 +277,7 @@ public class TrackHelperTest extends DefaultTestCase {
     public void testTrackGoalInvalidId() throws Exception {
         Tracker tracker = createTracker();
         TrackHelper.track().goal(-1).revenue(100f).with(tracker);
-        assertNull(tracker.getLastEvent());
+        assertNull(tracker.getLastTrackMe());
     }
 
     @Test
@@ -290,7 +285,7 @@ public class TrackHelperTest extends DefaultTestCase {
         Tracker tracker = createTracker();
         String name = "test name2";
         TrackHelper.track().impression(name).piece("test").target("test2").with(tracker);
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
 
         assertEquals(queryParams.get(QueryParams.CONTENT_NAME), name);
         assertEquals(queryParams.get(QueryParams.CONTENT_PIECE), "test");
@@ -305,7 +300,7 @@ public class TrackHelperTest extends DefaultTestCase {
         String name = "test name2";
         TrackHelper.track().interaction(name, interaction).piece("test").target("test2").with(tracker);
 
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
 
         assertEquals(queryParams.get(QueryParams.CONTENT_INTERACTION), interaction);
         assertEquals(queryParams.get(QueryParams.CONTENT_NAME), name);
@@ -323,7 +318,7 @@ public class TrackHelperTest extends DefaultTestCase {
         items.addItem(new EcommerceItems.Item("fake_sku_2").name("fake_product_2").category("fake_category_2").price(400).quantity(3));
         TrackHelper.track().cartUpdate(50000).items(items).with(tracker);
 
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
 
         assertEquals(queryParams.get(QueryParams.GOAL_ID), "0");
         assertEquals(queryParams.get(QueryParams.REVENUE), "500.00");
@@ -346,7 +341,7 @@ public class TrackHelperTest extends DefaultTestCase {
         items.addItem(new EcommerceItems.Item("fake_sku_2").name("fake_product_2").category("fake_category_2").price(400).quantity(3));
         TrackHelper.track().order("orderId", 10020).subTotal(7002).tax(2000).shipping(1000).discount(0).items(items).with(tracker);
 
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals(queryParams.get(QueryParams.GOAL_ID), "0");
         assertEquals(queryParams.get(QueryParams.ORDER_ID), "orderId");
         assertEquals(queryParams.get(QueryParams.REVENUE), "100.20");
@@ -375,7 +370,7 @@ public class TrackHelperTest extends DefaultTestCase {
         }
         assertNotNull(catchedException);
         TrackHelper.track().exception(catchedException).description("<Null> exception").fatal(false).with(tracker);
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals(queryParams.get(QueryParams.EVENT_CATEGORY), "Exception");
         StackTraceElement traceElement = catchedException.getStackTrace()[0];
         assertNotNull(traceElement);
@@ -397,7 +392,7 @@ public class TrackHelperTest extends DefaultTestCase {
         } catch (Exception e) {
             (Thread.getDefaultUncaughtExceptionHandler()).uncaughtException(Thread.currentThread(), e);
         }
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         validateDefaultQuery(queryParams);
         assertEquals(queryParams.get(QueryParams.EVENT_CATEGORY), "Exception");
         assertTrue(queryParams.get(QueryParams.EVENT_ACTION).startsWith("org.piwik.sdk.TrackHelperTest/testPiwikExceptionHandler:"));
@@ -415,8 +410,8 @@ public class TrackHelperTest extends DefaultTestCase {
 
     private static class QueryHashMap<String, V> extends HashMap<String, V> {
 
-        private QueryHashMap() {
-            super(10);
+        public QueryHashMap(int capacity) {
+            super(capacity);
         }
 
         public V get(QueryParams key) {
@@ -424,13 +419,13 @@ public class TrackHelperTest extends DefaultTestCase {
         }
     }
 
-    private static QueryHashMap<String, String> parseEventUrl(String url) throws Exception {
-        QueryHashMap<String, String> values = new QueryHashMap<>();
+    private static QueryHashMap<String, String> parseTrackMe(TrackMe trackMe) throws Exception {
+        Map<String, String> trackMeMap = trackMe.toMap();
+        QueryHashMap<String, String> values = new QueryHashMap<>(trackMeMap.size());
 
-        List<Pair<String, String>> params = UrlHelper.parse(new URI("http://localhost/" + url), "UTF-8");
-
-        for (Pair<String, String> param : params)
-            values.put(param.first, param.second);
+        for (Map.Entry<String, String> stringStringEntry : trackMeMap.entrySet()) {
+            values.put(stringStringEntry.getKey(), stringStringEntry.getValue());
+        }
 
         return values;
     }

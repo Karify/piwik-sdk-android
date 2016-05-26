@@ -40,23 +40,23 @@ public class TrackerTest extends DefaultTestCase {
     @Test
     public void testLastScreenUrl() throws Exception {
         Tracker tracker = createTracker();
-        assertNull(tracker.getLastEvent());
+        assertNull(tracker.getLastTrackMe());
 
         tracker.track(new TrackMe());
-        assertNotNull(tracker.getLastEvent());
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        assertNotNull(tracker.getLastTrackMe());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals(tracker.getApplicationBaseURL() + "/", queryParams.get(QueryParams.URL_PATH));
 
         tracker.track(new TrackMe().set(QueryParams.URL_PATH, "http://some.thing.com/foo/bar"));
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals("http://some.thing.com/foo/bar", queryParams.get(QueryParams.URL_PATH));
 
         tracker.track(new TrackMe().set(QueryParams.URL_PATH, "http://some.other/thing"));
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals("http://some.other/thing", queryParams.get(QueryParams.URL_PATH));
 
         tracker.track(new TrackMe());
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals("http://some.other/thing", queryParams.get(QueryParams.URL_PATH));
     }
 
@@ -73,7 +73,7 @@ public class TrackerTest extends DefaultTestCase {
         // emulate default trackScreenView
         Robolectric.buildActivity(TestActivity.class).create().start().resume().visible().get();
 
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         validateDefaultQuery(queryParams);
         assertEquals(queryParams.get(QueryParams.ACTION_NAME), TestActivity.getTestTitle());
     }
@@ -148,7 +148,7 @@ public class TrackerTest extends DefaultTestCase {
         tracker.setApplicationDomain("my-domain.com");
         TrackHelper.track().screen("test/test").title("Test title").with(tracker);
 
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         validateDefaultQuery(queryParams);
         assertTrue(queryParams.get(QueryParams.URL_PATH).equals("http://my-domain.com/test/test"));
     }
@@ -185,7 +185,7 @@ public class TrackerTest extends DefaultTestCase {
         assertEquals(visitorId, tracker.getVisitorId());
         TrackMe trackMe = new TrackMe();
         tracker.track(trackMe);
-        assertTrue(tracker.getLastEvent().contains("_id="));
+        assertTrue(tracker.getLastTrackMe().toMap().containsKey("_id="));
     }
 
     @Test
@@ -213,7 +213,7 @@ public class TrackerTest extends DefaultTestCase {
         Tracker tracker = createTracker();
         TrackMe trackMe = new TrackMe();
         tracker.track(trackMe);
-        assertTrue(tracker.getLastEvent().contains("res=480x800"));
+        assertTrue(tracker.getLastTrackMe().toMap().containsKey("res"));
     }
 
     @Test
@@ -222,12 +222,9 @@ public class TrackerTest extends DefaultTestCase {
         tracker.setVisitCustomVariable(1, "2& ?", "3@#");
         TrackHelper.track().screen("").with(tracker);
 
-        String event = tracker.getLastEvent();
-        Map<String, String> queryParams = parseEventUrl(event);
+        Map<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
 
         assertEquals(queryParams.get("_cvar"), "{'1':['2& ?','3@#']}".replaceAll("'", "\""));
-        // check url encoding
-        assertTrue(event.contains("_cvar=%7B%221%22%3A%5B%222%26%20%3F%22%2C%223%40%23%22%5D%7D"));
     }
 
     @Test
@@ -235,17 +232,17 @@ public class TrackerTest extends DefaultTestCase {
         Tracker tracker = createTracker();
         TrackMe trackMe = new TrackMe();
         tracker.track(trackMe);
-        assertTrue(tracker.getLastEvent().contains("new_visit=1"));
+        assertTrue(tracker.getLastTrackMe().toMap().containsKey("new_visit"));
 
         TrackHelper.track().screen("").with(tracker);
-        assertFalse(tracker.getLastEvent().contains("new_visit=1"));
+        assertFalse(tracker.getLastTrackMe().toMap().containsKey("new_visit"));
 
         TrackHelper.track().screen("").with(tracker);
-        assertFalse(tracker.getLastEvent().contains("new_visit=1"));
+        assertFalse(tracker.getLastTrackMe().toMap().containsKey("new_visit"));
 
         tracker.startNewSession();
         TrackHelper.track().screen("").with(tracker);
-        assertTrue(tracker.getLastEvent().contains("new_visit=1"));
+        assertTrue(tracker.getLastTrackMe().toMap().containsKey("new_visit"));
     }
 
     @Test
@@ -303,13 +300,15 @@ public class TrackerTest extends DefaultTestCase {
         Tracker tracker = createTracker();
         tracker.setSessionTimeout(0);
         TrackHelper.track().screen("test").with(tracker);
-        assertTrue(tracker.getLastEvent().contains("new_visit=1"));
+        assertTrue(tracker.getLastTrackMe().toMap().containsKey("new_visit"));
+        assertTrue(tracker.getLastTrackMe().toMap().get("new_visit").equals("1"));
         Thread.sleep(1, 0);
         TrackHelper.track().screen("test").with(tracker);
-        assertTrue(tracker.getLastEvent().contains("new_visit=1"));
+        assertTrue(tracker.getLastTrackMe().toMap().containsKey("new_visit"));
+        assertTrue(tracker.getLastTrackMe().toMap().get("new_visit").equals("1"));
         tracker.setSessionTimeout(60000);
         TrackHelper.track().screen("test").with(tracker);
-        assertFalse(tracker.getLastEvent().contains("new_visit=1"));
+        assertFalse(tracker.getLastTrackMe().toMap().containsKey("new_visit"));
     }
 
     private void checkEvent(QueryHashMap<String, String> queryParams, String name, Float value) {
@@ -400,13 +399,13 @@ public class TrackerTest extends DefaultTestCase {
         Tracker tracker1 = createTracker();
 
         TrackHelper.track().event("TestCategory", "TestAction").with(tracker);
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         Thread.sleep(10);
         // make sure we are tracking in seconds
         assertTrue(Math.abs((System.currentTimeMillis() / 1000) - Long.parseLong(queryParams.get(QueryParams.FIRST_VISIT_TIMESTAMP))) < 2);
 
         TrackHelper.track().event("TestCategory", "TestAction").with(tracker1);
-        QueryHashMap<String, String> queryParams1 = parseEventUrl(tracker1.getLastEvent());
+        QueryHashMap<String, String> queryParams1 = parseTrackMe(tracker1.getLastTrackMe());
         assertEquals(Long.parseLong(queryParams.get(QueryParams.FIRST_VISIT_TIMESTAMP)), Long.parseLong(queryParams1.get(QueryParams.FIRST_VISIT_TIMESTAMP)));
         assertEquals(piwik.getSharedPreferences().getLong(Tracker.PREF_KEY_TRACKER_FIRSTVISIT, -1), Long.parseLong(queryParams.get(QueryParams.FIRST_VISIT_TIMESTAMP)));
     }
@@ -419,14 +418,14 @@ public class TrackerTest extends DefaultTestCase {
         assertNull(tracker.getDefaultTrackMe().get(QueryParams.TOTAL_NUMBER_OF_VISITS));
 
         TrackHelper.track().event("TestCategory", "TestAction").with(tracker);
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals(1, Integer.parseInt(queryParams.get(QueryParams.TOTAL_NUMBER_OF_VISITS)));
 
         tracker = createTracker();
         assertEquals(1, piwik.getSharedPreferences().getInt(Tracker.PREF_KEY_TRACKER_VISITCOUNT, -1));
         assertNull(tracker.getDefaultTrackMe().get(QueryParams.TOTAL_NUMBER_OF_VISITS));
         TrackHelper.track().event("TestCategory", "TestAction").with(tracker);
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals(2, Integer.parseInt(queryParams.get(QueryParams.TOTAL_NUMBER_OF_VISITS)));
         assertEquals(2, piwik.getSharedPreferences().getInt(Tracker.PREF_KEY_TRACKER_VISITCOUNT, -1));
     }
@@ -513,7 +512,7 @@ public class TrackerTest extends DefaultTestCase {
         Tracker tracker = createTracker();
         TrackHelper.track().event("TestCategory", "TestAction").with(tracker);
         long _startTime = System.currentTimeMillis() / 1000;
-        QueryHashMap<String, String> queryParams = parseEventUrl(tracker.getLastEvent());
+        QueryHashMap<String, String> queryParams = parseTrackMe(tracker.getLastTrackMe());
         // There was no previous visit
         assertNull(queryParams.get(QueryParams.PREVIOUS_VISIT_TIMESTAMP));
         Thread.sleep(1000);
@@ -525,14 +524,14 @@ public class TrackerTest extends DefaultTestCase {
 
         tracker = createTracker();
         TrackHelper.track().event("TestCategory", "TestAction").with(tracker);
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         // Transmitted timestamp is the one from the first visit visit
         assertEquals(previousVisit, Long.parseLong(queryParams.get(QueryParams.PREVIOUS_VISIT_TIMESTAMP)));
 
         Thread.sleep(1000);
         tracker = createTracker();
         TrackHelper.track().event("TestCategory", "TestAction").with(tracker);
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         // Now the timestamp changed as this is the 3rd visit.
         assertNotEquals(previousVisit, Long.parseLong(queryParams.get(QueryParams.PREVIOUS_VISIT_TIMESTAMP)));
         Thread.sleep(1000);
@@ -541,7 +540,7 @@ public class TrackerTest extends DefaultTestCase {
 
         tracker = createTracker();
         TrackHelper.track().event("TestCategory", "TestAction").with(tracker);
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         // Just make sure the timestamp in the 4th visit is from the 3rd visit
         assertEquals(previousVisit, Long.parseLong(queryParams.get(QueryParams.PREVIOUS_VISIT_TIMESTAMP)));
 
@@ -549,14 +548,14 @@ public class TrackerTest extends DefaultTestCase {
         TrackMe custom = new TrackMe();
         custom.set(QueryParams.PREVIOUS_VISIT_TIMESTAMP, 1000L);
         tracker.track(custom);
-        queryParams = parseEventUrl(tracker.getLastEvent());
+        queryParams = parseTrackMe(tracker.getLastTrackMe());
         assertEquals(1000L, Long.parseLong(queryParams.get(QueryParams.PREVIOUS_VISIT_TIMESTAMP)));
     }
 
     private static class QueryHashMap<String, V> extends HashMap<String, V> {
 
-        private QueryHashMap() {
-            super(10);
+        public QueryHashMap(int capacity) {
+            super(capacity);
         }
 
         public V get(QueryParams key) {
@@ -564,13 +563,13 @@ public class TrackerTest extends DefaultTestCase {
         }
     }
 
-    private static QueryHashMap<String, String> parseEventUrl(String url) throws Exception {
-        QueryHashMap<String, String> values = new QueryHashMap<>();
+    private static QueryHashMap<String, String> parseTrackMe(TrackMe trackMe) throws Exception {
+        Map<String, String> trackMeMap = trackMe.toMap();
+        QueryHashMap<String, String> values = new QueryHashMap<>(trackMeMap.size());
 
-        List<Pair<String, String>> params = UrlHelper.parse(new URI("http://localhost/" + url), "UTF-8");
-
-        for (Pair<String, String> param : params)
-            values.put(param.first, param.second);
+        for (Map.Entry<String, String> stringStringEntry : trackMeMap.entrySet()) {
+            values.put(stringStringEntry.getKey(), stringStringEntry.getValue());
+        }
 
         return values;
     }

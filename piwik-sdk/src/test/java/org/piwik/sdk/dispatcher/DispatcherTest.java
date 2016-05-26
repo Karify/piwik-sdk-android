@@ -23,12 +23,13 @@ import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
 import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
+
+import okhttp3.HttpUrl;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -80,7 +81,7 @@ public class DispatcherTest {
         Dispatcher dispatcher = createTracker().getDispatcher();
         dispatcher.setDispatchInterval(-1);
         dispatcher.setConnectionTimeOut(20);
-        dispatcher.submit("url");
+        dispatcher.submit(new TrackMe());
 
         assertTrue(dispatcher.forceDispatch());
         assertFalse(dispatcher.forceDispatch());
@@ -90,20 +91,15 @@ public class DispatcherTest {
     public void testDoPostFailed() throws Exception {
         Dispatcher dispatcher = createTracker().getDispatcher();
         dispatcher.setConnectionTimeOut(1);
-        assertFalse(dispatcher.dispatch(new Packet(null, null)));
-        assertFalse(dispatcher.dispatch(new Packet(new URL("http://test/?s=^test"), new JSONObject())));
+        assertFalse(dispatcher.dispatch(new Packet(HttpUrl.parse(""), null)));
+        assertFalse(dispatcher.dispatch(new Packet(HttpUrl.parse("http://test/?s=^test"), new JSONObject())));
     }
 
     @Test
     public void testDoGetFailed() throws Exception {
         Dispatcher dispatcher = createTracker().getDispatcher();
         dispatcher.setConnectionTimeOut(1);
-        assertFalse(dispatcher.dispatch(new Packet(null)));
-    }
-
-    @Test
-    public void testUrlEncodeUTF8() throws Exception {
-        assertEquals(Dispatcher.urlEncodeUTF8((String) null), "");
+        assertFalse(dispatcher.dispatch(new Packet(HttpUrl.parse(""))));
     }
 
     @Test
@@ -256,7 +252,7 @@ public class DispatcherTest {
                                     .set(QueryParams.EVENT_VALUE, j);
 
                             tracker.track(trackMe);
-                            createdQueries.add(tracker.getAPIUrl().toString() + Dispatcher.urlEncodeUTF8(trackMe.toMap()));
+                            createdQueries.add(tracker.getAPIUrl().toString() + trackMe.toMap());
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -274,11 +270,11 @@ public class DispatcherTest {
             if (request.getJSONObject() != null) {
                 JSONArray batchedRequests = request.getJSONObject().getJSONArray("requests");
                 for (int json = 0; json < batchedRequests.length(); json++) {
-                    String unbatchedRequest = request.getTargetURL().toExternalForm() + batchedRequests.get(json).toString();
+                    String unbatchedRequest = request.getTargetURL().toString() + batchedRequests.get(json).toString();
                     flattenedQueries.add(unbatchedRequest);
                 }
             } else {
-                flattenedQueries.add(request.getTargetURL().toExternalForm());
+                flattenedQueries.add(request.getTargetURL().toString());
             }
         }
         return flattenedQueries;

@@ -112,37 +112,4 @@ public class TrackMeTest extends DefaultTestCase {
             assertNull(trackMe.get(param));
         }
     }
-
-    @Test
-    public void testEncondingSingles() throws Exception {
-        for (QueryParams param : QueryParams.values()) {
-            String testVal = UUID.randomUUID().toString();
-            TrackMe trackMe = new TrackMe();
-            trackMe.set(param, testVal);
-            assertEquals("?" + param.toString() + "=" + testVal, Dispatcher.urlEncodeUTF8(trackMe.toMap()));
-        }
-    }
-
-    @Test
-    public void testEncodingMultiples() throws Exception {
-        TrackMe trackMe = new TrackMe();
-        Map<String, String> testValues = new HashMap<>();
-        for (QueryParams param : QueryParams.values()) {
-            String testVal = UUID.randomUUID().toString();
-            trackMe.set(param, testVal);
-            testValues.put(param.toString(), testVal);
-        }
-        final Map<String, String> parsedParams = parseEncoding(Dispatcher.urlEncodeUTF8(trackMe.toMap()));
-        for (Map.Entry<String, String> pair : parsedParams.entrySet()) {
-            assertEquals(testValues.get(pair.getKey()), pair.getValue());
-        }
-    }
-
-    private static Map<String, String> parseEncoding(String url) throws Exception {
-        Map<String, String> values = new HashMap<>();
-        List<Pair<String, String>> params = UrlHelper.parse(new URI("http://localhost/" + url), "UTF-8");
-        for (Pair<String, String> param : params) values.put(param.first, param.second);
-        return values;
-    }
-
 }

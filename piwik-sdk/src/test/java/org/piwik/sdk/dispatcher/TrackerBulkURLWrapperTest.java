@@ -3,6 +3,8 @@ package org.piwik.sdk.dispatcher;
 import org.json.JSONArray;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.piwik.sdk.QueryParams;
+import org.piwik.sdk.TrackMe;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
@@ -11,6 +13,8 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+
+import okhttp3.HttpUrl;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -22,11 +26,11 @@ import static org.junit.Assert.assertTrue;
 @RunWith(RobolectricTestRunner.class)
 public class TrackerBulkURLWrapperTest {
 
-    private TrackerBulkURLWrapper createWrapper(String url, String... events) throws Exception {
+    private TrackerBulkURLWrapper createWrapper(String url, TrackMe... events) throws Exception {
         if (url == null) {
             url = "http://example.com/";
         }
-        URL _url = new URL(url);
+        HttpUrl _url = HttpUrl.parse(url);
 
         return new TrackerBulkURLWrapper(_url, Arrays.asList(events), "test_token");
     }
@@ -52,13 +56,13 @@ public class TrackerBulkURLWrapperTest {
 
     @Test
     public void testWrapperMalformedURLException() throws Exception {
-        TrackerBulkURLWrapper wrapper = createWrapper("http://localhost", ":a/");
+        TrackerBulkURLWrapper wrapper = createWrapper("http://localhost", new TrackMe());
         assertNull(wrapper.getEventUrl(wrapper.iterator().next()));
     }
 
     @Test
     public void testPageIterator() throws Exception {
-        TrackerBulkURLWrapper wrapper = createWrapper(null, "test1");
+        TrackerBulkURLWrapper wrapper = createWrapper(null, new TrackMe());
         assertTrue(wrapper.iterator().hasNext());
         assertEquals(wrapper.iterator().next().elementsCount(), 1);
         assertNull(wrapper.iterator().next());
@@ -66,11 +70,11 @@ public class TrackerBulkURLWrapperTest {
 
     @Test
     public void testPage() throws Exception {
-        List<String> events = new LinkedList<String>();
+        List<TrackMe> events = new LinkedList<TrackMe>();
         for (int i = 0; i < TrackerBulkURLWrapper.getEventsPerPage() * 2; i++) {
-            events.add("eve" + i);
+            events.add(new TrackMe().set(QueryParams.ACTION_NAME, 1));
         }
-        TrackerBulkURLWrapper wrapper = new TrackerBulkURLWrapper(new URL("http://example.com/"), events, null);
+        TrackerBulkURLWrapper wrapper = new TrackerBulkURLWrapper(HttpUrl.parse("http://example.com/"), events, null);
 
         Iterator<TrackerBulkURLWrapper.Page> it = wrapper.iterator();
         assertTrue(it.hasNext());
@@ -90,13 +94,15 @@ public class TrackerBulkURLWrapperTest {
     @Test
     public void testGetApiUrl() throws Exception {
         String url = "http://www.com/java.htm";
-        TrackerBulkURLWrapper wrapper = createWrapper(url, "");
+        TrackerBulkURLWrapper wrapper = createWrapper(url, new TrackMe());
         assertEquals(wrapper.getApiUrl().toString(), url);
     }
 
     @Test
     public void testGetEvents() throws Exception {
-        TrackerBulkURLWrapper wrapper = createWrapper(null, "?one=1", "?two=2");
+        TrackMe one = new TrackMe().trySet(QueryParams.ACTION_NAME, "one");
+        TrackMe two = new TrackMe().trySet(QueryParams.ACTION_NAME, "two");
+        TrackerBulkURLWrapper wrapper = createWrapper(null, one, two);
         TrackerBulkURLWrapper.Page page = wrapper.iterator().next();
 
         assertEquals(wrapper.getEvents(page).getJSONArray("requests").length(), 2);
@@ -107,11 +113,11 @@ public class TrackerBulkURLWrapperTest {
 
     @Test
     public void testGetEventUrl() throws Exception {
-        List<String> events = new LinkedList<String>();
+        List<TrackMe> events = new LinkedList<TrackMe>();
         for (int i = 0; i < TrackerBulkURLWrapper.getEventsPerPage() + 1; i++) {
-            events.add("?eve" + i);
+            events.add(new TrackMe().trySet(QueryParams.ACTION_NAME, "eve" + i));
         }
-        URL url = new URL("http://example.com/");
+        HttpUrl url = HttpUrl.parse("http://example.com/");
         TrackerBulkURLWrapper wrapper = new TrackerBulkURLWrapper(url, events, null);
         //skip first page
         wrapper.iterator().next();
